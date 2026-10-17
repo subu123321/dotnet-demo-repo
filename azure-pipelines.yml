@@ -1,0 +1,94 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  buildConfiguration: 'Release'
+  project: 'src/SimpleWeb/SimpleWeb.csproj'
+
+stages:
+# ---------------------------- BUILD ----------------------------
+- stage: Build
+  displayName: 'Build & Package'
+  jobs:
+  - job: BuildJob
+    pool:
+      vmImage: 'windows-latest'
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Install .NET 8 SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '8.x'
+
+    - script: dotnet restore $(project)
+      displayName: 'Restore'
+
+    - script: dotnet build $(project) --configuration $(buildConfiguration) --no-restore /p:InformationalVersion=$(Build.BuildNumber)
+      displayName: 'Build'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish (zip)'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(project)'
+        arguments: '--configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)'
+        zipAfterPublish: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish artifact'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+
+# ---------------------------- DEPLOY ----------------------------
+- stage: Deploy
+  displayName: 'Deploy to IIS'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployIIS
+    displayName: 'Deploy to IIS server'
+    environment:
+      name: 'IIS-Lab'
+      resourceType: VirtualMachine
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: IISWebAppManagementOnMachineGroup@0
+            displayName: 'Create/Update IIS site and app pool'
+            inputs:
+              IISDeploymentType: 'IISWebsite'
+              ActionIISWebsite: 'CreateOrUpdateWebsite'
+              WebsiteName: 'SimpleWeb'
+              WebsitePhysicalPath: '%SystemDrive%\inetpub\wwwroot\SimpleWeb'
+              WebsitePhysicalPathAuth: 'WebsiteUserPassThrough'
+              AddBinding: true
+              Bindings: |
+                {
+                  bindings: [
+                    {
+                      protocol: "http",
+                      ipAddress: "All Unassigned",
+                      port: "8080",
+                      hostname: "",
+                      sslThumbprint: "",
+                      sniFlag: false
+                    }
+                  ]
+                }
+              CreateOrUpdateAppPoolForWebsite: true
+              AppPoolNameForWebsite: 'SimpleWebPool'
+              DotNetVersionForWebsite: 'No Managed Code'
+              PipeLineModeForWebsite: 'Integrated'
+              AppPoolIdentityForWebsite: 'ApplicationPoolIdentity'
+
+          - task: IISWebAppDeploymentOnMachineGroup@0
+            displayName: 'Deploy package to IIS'
+            inputs:
+              WebSiteName: 'SimpleWeb'
+              Package: '$(Pipeline.Workspace)\drop\**\*.zip'
+              TakeAppOfflineFlag: true

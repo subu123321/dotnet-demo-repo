@@ -1,0 +1,27 @@
+@page
+@using System.Reflection
+@{
+    var version = typeof(Program).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "local";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SimpleWeb - IIS Lab</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <main class="card">
+        <h1>Hello from IIS 🚀</h1>
+        <p>Deployed with Azure DevOps</p>
+        <table>
+            <tr><th>Build / Version</th><td>@version</td></tr>
+            <tr><th>Server</th><td>@Environment.MachineName</td></tr>
+            <tr><th>Server time (UTC)</th><td>@DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")</td></tr>
+        </table>
+        <p><a href="/health">/health</a></p>
+    </main>
+</body>
+</html>
